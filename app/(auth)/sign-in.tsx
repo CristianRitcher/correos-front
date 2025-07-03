@@ -5,6 +5,9 @@ import { useSSO } from '@clerk/clerk-expo'
 import { useSignIn } from '@clerk/clerk-expo'
 import { Link, useRouter } from 'expo-router'
 import { Text, TextInput, Button, View } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useUser } from '@clerk/clerk-expo'
+
 
 
 // Handle any pending authentication sessions
@@ -13,7 +16,7 @@ WebBrowser.maybeCompleteAuthSession()
 export default function Page() {
     const { signIn, setActive, isLoaded } = useSignIn()
     const router = useRouter()
-
+    const { user } = useUser()
     const [emailAddress, setEmailAddress] = useState('')
     const [password, setPassword] = useState('')    
 
@@ -29,6 +32,18 @@ export default function Page() {
 
             if (createdSessionId) {
                 await setActive!({ session: createdSessionId });
+                const res = await fetch('http://192.168.0.116:3000/auth/oauth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        proveedor: strategy.replace('oauth_', ''),
+                        sub: user?.id || '',
+                        correo: user?.primaryEmailAddress?.emailAddress || '',
+                    }),
+                })
+                const data = await res.json()
+                await AsyncStorage.setItem('token', data.token)
+
             } else {
                 // MFA or additional steps might be needed
                 console.warn('Sign in requires additional steps', { signIn, signUp });
@@ -52,6 +67,14 @@ export default function Page() {
             // and redirect the user
             if (signInAttempt.status === 'complete') {
                 await setActive({ session: signInAttempt.createdSessionId })
+                const res = await fetch('https://TU_BACKEND_URL/auth/signin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ correo: emailAddress, contrasena: password }),
+                })
+                const data = await res.json()
+
+                await AsyncStorage.setItem('token', data.token)
                 router.replace('/')
             } else {
                 // If the status is not complete, check why. User may need to

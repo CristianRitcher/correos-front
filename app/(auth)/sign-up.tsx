@@ -4,8 +4,9 @@ import { useSignUp, useSSO } from '@clerk/clerk-expo'
 import { useCallback, useState } from 'react';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
-import { Link, useRouter } from 'expo-router';
-
+import { Link, useRouter } from 'expo-router';  
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '@clerk/clerk-expo'
 export default function Page() {
     const { isLoaded, signUp, setActive } = useSignUp()
     const router = useRouter()
@@ -14,7 +15,7 @@ export default function Page() {
     const [password, setPassword] = useState('')
     const [pendingVerification, setPendingVerification] = useState(false)
     const [code, setCode] = useState('')
-
+    const { user } = useUser()
     // Handle submission of sign-up form
     const onSignUpPress = async () => {
         if (!isLoaded) return
@@ -53,6 +54,16 @@ export default function Page() {
             // and redirect the user
             if (signUpAttempt.status === 'complete') {
                 await setActive({ session: signUpAttempt.createdSessionId })
+                // Llama a tu backend
+                const res = await fetch('http://192.168.0.116:3000/auth/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ correo: emailAddress, contrasena: password }),
+                })
+                const data = await res.json()
+
+                // Guarda el token
+                await AsyncStorage.setItem('token', data.token)
                 router.replace('/')
             } else {
                 // If the status is not complete, check why. User may need to
@@ -75,6 +86,17 @@ export default function Page() {
 
             if (createdSessionId) {
                 await setActive!({ session: createdSessionId });
+                const res = await fetch('http://192.168.0.116:3000/auth/oauth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        proveedor: strategy.replace('oauth_', ''),
+                        sub: user?.id || '',
+                        correo: user?.primaryEmailAddress?.emailAddress || '',
+                    }),
+                })
+                const data = await res.json()
+                await AsyncStorage.setItem('token', data.token)
             } else {
                 // MFA or additional steps might be needed
                 console.warn('Sign in requires additional steps', { signIn, signUp });
